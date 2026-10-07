@@ -1,7 +1,6 @@
 package com.justus0405.ntmfluidconverters.tile;
 
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
@@ -11,21 +10,20 @@ import net.minecraftforge.fluids.IFluidHandler;
 import com.hbm.inventory.fluid.FluidType;
 import com.hbm.inventory.fluid.Fluids;
 import com.hbm.inventory.fluid.tank.FluidTank;
+import com.hbm.tileentity.TileEntityLoadedBase;
+import com.hbm.tileentity.TilePort.PortDef;
+import com.hbm.tileentity.TilePortShapes;
 import com.justus0405.ntmfluidconverters.FluidConverter;
 import com.justus0405.ntmfluidconverters.ModConfig;
 
 import api.hbm.fluidmk2.IFluidStandardSenderMK2;
 
 // Accepts fluid from Forge pipes and pushes it into HBM networks.
-public class TileEntityForgeToHbm extends TileEntity implements IFluidStandardSenderMK2, IFluidHandler {
+// Patched for HBM NTM X5808+ (port-based fluid networks, tryProvide was removed).
+public class TileEntityForgeToHbm extends TileEntityLoadedBase implements IFluidStandardSenderMK2, IFluidHandler {
 
     private final FluidTank hbmTank = new FluidTank(Fluids.NONE, ModConfig.forgeToHbmBufferSize);
-
-    // ILoadedTile
-    @Override
-    public boolean isLoaded() {
-        return !isInvalid();
-    }
+    private PortDef[] cachedPorts;
 
     // IFluidUserMK2
     @Override
@@ -39,18 +37,17 @@ public class TileEntityForgeToHbm extends TileEntity implements IFluidStandardSe
         return new FluidTank[] { hbmTank };
     }
 
+    private PortDef[] getPorts() {
+        if (cachedPorts == null) cachedPorts = TilePortShapes.around(xCoord, yCoord, zCoord);
+        return cachedPorts;
+    }
+
     // Tick
     @Override
     public void updateEntity() {
         if (worldObj.isRemote) return;
-        if (hbmTank.getTankType() == Fluids.NONE || hbmTank.getFill() <= 0) return;
-
-        for (ForgeDirection dir : ForgeDirection.VALID_DIRECTIONS) {
-            int nx = xCoord + dir.offsetX;
-            int ny = yCoord + dir.offsetY;
-            int nz = zCoord + dir.offsetZ;
-            tryProvide(hbmTank, worldObj, nx, ny, nz, dir);
-        }
+        setupFluidPorts(getPorts());
+        updatePortFIFO();
     }
 
     // IFluidHandler fill only, can't drain from Forge side.
@@ -61,9 +58,9 @@ public class TileEntityForgeToHbm extends TileEntity implements IFluidStandardSe
         FluidType hbmType = FluidConverter.getHbmFluid(resource.getFluid());
         if (hbmType == Fluids.NONE) return 0;
 
-        if (hbmTank.getTankType() != Fluids.NONE && hbmTank.getTankType() != hbmType) return 0;
+        if (hbmTank.getTankType() != Fluids.NONE && hbmTank.getTankType() != hbmType && hbmTank.getFill() > 0) return 0;
 
-        int space = hbmTank.getMaxFill() - hbmTank.getFill();
+        int space = hbmTank.getTankType() == hbmType ? hbmTank.getMaxFill() - hbmTank.getFill() : hbmTank.getMaxFill();
         int toFill = Math.min(resource.amount, space);
 
         if (doFill && toFill > 0) {
@@ -91,7 +88,7 @@ public class TileEntityForgeToHbm extends TileEntity implements IFluidStandardSe
     public boolean canFill(ForgeDirection from, Fluid fluid) {
         FluidType hbmType = FluidConverter.getHbmFluid(fluid);
         if (hbmType == Fluids.NONE) return false;
-        return hbmTank.getTankType() == Fluids.NONE || hbmTank.getTankType() == hbmType;
+        return hbmTank.getTankType() == Fluids.NONE || hbmTank.getTankType() == hbmType || hbmTank.getFill() <= 0;
     }
 
     @Override

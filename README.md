@@ -33,6 +33,8 @@ Absolutely!
 **Does it work with NTM version X?**<br>
 Yes. It always works with the latest NTM version. You do not need to update NTM Fluid Converters when NTM updates, unless the NTM mod author changes the internal fluid logic in a way that breaks this mod.
 
+NTM X5808 did exactly that: machines now join fluid networks through `TilePort`s and the old `trySubscribe`/`tryProvide` helpers are gone, so version 1.4.0 crashes with a `NoSuchMethodError` on those builds. The converters now use the port system and require NTM X5808 or newer; on older NTM builds use 1.4.0.
+
 **Why is the converter not fast enough?**<br>
 This is due to an internal tank limit of 8,000 mB. To increase the throughput you can edit the config file.
 
